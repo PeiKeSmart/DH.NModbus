@@ -5,16 +5,13 @@
     <OutputPath>..\Bin\UnitTest</OutputPath>
 
     <IsPackable>false</IsPackable>
-    
-    <SignAssembly>True</SignAssembly>
-    <AssemblyOriginatorKeyFile>..\Doc\newlife.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="DH.NCore" Version="3.7.2024.8190001" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     <PackageReference Include="Moq" Version="4.20.70" />
-    <PackageReference Include="NewLife.Core" Version="10.7.2024.202" />
     <PackageReference Include="xunit" Version="2.7.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
       <PrivateAssets>all</PrivateAssets>
@@ -23,8 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NewLife.ModbusRTU\NewLife.ModbusRTU.csproj" />
-    <ProjectReference Include="..\NewLife.Modbus\NewLife.Modbus.csproj" />
+    <ProjectReference Include="..\DH.NModbusRTU\DH.NModbusRTU.csproj" />
+    <ProjectReference Include="..\DH.NModbus\DH.NModbus.csproj" />
   </ItemGroup>
 
 </Project>

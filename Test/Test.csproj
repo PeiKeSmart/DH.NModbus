@@ -16,12 +16,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NewLife.Core" Version="10.7.2024.202" />
+    <PackageReference Include="DH.NCore" Version="3.7.2024.8190001" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NewLife.ModbusRTU\NewLife.ModbusRTU.csproj" />
-    <ProjectReference Include="..\NewLife.Modbus\NewLife.Modbus.csproj" />
+    <ProjectReference Include="..\DH.NModbusRTU\DH.NModbusRTU.csproj" />
+    <ProjectReference Include="..\DH.NModbus\DH.NModbus.csproj" />
   </ItemGroup>
 
 </Project>
