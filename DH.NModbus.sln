@@ -1,0 +1,60 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.32112.339
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test", "Test\Test.csproj", "{582E00A2-4FA4-41DC-84AD-EE264A9FF4D8}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XUnitTest", "XUnitTest\XUnitTest.csproj", "{08A39462-0531-45AB-ACBB-03F62AF4400F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{719C113A-6804-4150-8473-BF889F06DFD6}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+		global.json = global.json
+		NuGet.config = NuGet.config
+		.github\workflows\publish-beta.yml = .github\workflows\publish-beta.yml
+		.github\workflows\publish.yml = .github\workflows\publish.yml
+		Readme.MD = Readme.MD
+		.github\workflows\test.yml = .github\workflows\test.yml
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DH.NModbus", "DH.NModbus\DH.NModbus.csproj", "{2DE51303-EAAA-46BD-AE77-3ED68313B75C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DH.NModbusRTU", "DH.NModbusRTU\DH.NModbusRTU.csproj", "{29C5BD68-5F2F-4DE8-8215-8B3F40912034}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WinModbus", "WinModbus\WinModbus.csproj", "{64D150B9-1B3B-46C1-82CD-97CA74718E50}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{582E00A2-4FA4-41DC-84AD-EE264A9FF4D8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{582E00A2-4FA4-41DC-84AD-EE264A9FF4D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{582E00A2-4FA4-41DC-84AD-EE264A9FF4D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{582E00A2-4FA4-41DC-84AD-EE264A9FF4D8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{08A39462-0531-45AB-ACBB-03F62AF4400F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08A39462-0531-45AB-ACBB-03F62AF4400F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08A39462-0531-45AB-ACBB-03F62AF4400F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08A39462-0531-45AB-ACBB-03F62AF4400F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2DE51303-EAAA-46BD-AE77-3ED68313B75C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2DE51303-EAAA-46BD-AE77-3ED68313B75C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2DE51303-EAAA-46BD-AE77-3ED68313B75C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2DE51303-EAAA-46BD-AE77-3ED68313B75C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{29C5BD68-5F2F-4DE8-8215-8B3F40912034}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{29C5BD68-5F2F-4DE8-8215-8B3F40912034}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{29C5BD68-5F2F-4DE8-8215-8B3F40912034}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{29C5BD68-5F2F-4DE8-8215-8B3F40912034}.Release|Any CPU.Build.0 = Release|Any CPU
+		{64D150B9-1B3B-46C1-82CD-97CA74718E50}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{64D150B9-1B3B-46C1-82CD-97CA74718E50}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{64D150B9-1B3B-46C1-82CD-97CA74718E50}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{64D150B9-1B3B-46C1-82CD-97CA74718E50}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {323831A1-A95B-40AB-B9AD-36A0BC10C2CB}
+	EndGlobalSection
+EndGlobal
