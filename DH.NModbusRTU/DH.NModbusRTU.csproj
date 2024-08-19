@@ -23,7 +23,7 @@
     <PackageId>$(AssemblyName)</PackageId>
     <Authors>$(Company)</Authors>
     <PackageProjectUrl>https://www.haocoding.com/</PackageProjectUrl>
-    <PackageIcon>leaf.png</PackageIcon>
+    <PackageIcon>DH.png</PackageIcon>
     <RepositoryUrl>https://github.com/PeiKeSmart/DH.NModbus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>物联网;IoT;边缘计算;Edge;湖北登灏科技有限公司;DH组件;DH;$(AssemblyName)</PackageTags>
