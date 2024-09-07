@@ -93,7 +93,7 @@ public abstract class ModbusIp : Modbus
         for (var i = 0; i < 8; i++)
         {
             // 阻塞读取
-            var pk2 = _client.Receive();
+            var pk2 = (Packet)_client.Receive();
             if (pk2 == null || pk2.Total == 0) continue;
 
             if (pk == null)
