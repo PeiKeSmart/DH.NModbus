@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using NewLife;
+using NewLife.Data;
 using NewLife.IoT.Protocols;
 using Xunit;
 
@@ -18,7 +19,7 @@ public class ModbusMessageTests
         var str = "01-05-00-02-FF-00-2D-FA";
         var dt = str.ToHex();
 
-        var msg = ModbusMessage.Read(dt, false);
+        var msg = ModbusMessage.Read(new Packet(dt), false);
         Assert.NotNull(msg);
 
         Assert.Equal(1, msg.Host);

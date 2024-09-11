@@ -36,7 +36,7 @@ public class ModbusIpMessage : ModbusMessage
     /// <param name="data">数据包</param>
     /// <param name="reply">是否响应</param>
     /// <returns></returns>
-    public new static ModbusIpMessage Read(Packet data, Boolean reply = false)
+    public new static ModbusIpMessage Read(IPacket data, Boolean reply = false)
     {
         var msg = new ModbusIpMessage { Reply = reply };
         return msg.Read(data.GetStream(), null) ? msg : null;

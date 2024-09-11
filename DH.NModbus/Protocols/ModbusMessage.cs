@@ -73,7 +73,7 @@ public class ModbusMessage : IAccessor
     /// <param name="data">数据包</param>
     /// <param name="reply">是否响应</param>
     /// <returns></returns>
-    public static ModbusMessage Read(Packet data, Boolean reply = false)
+    public static ModbusMessage Read(IPacket data, Boolean reply = false)
     {
         var msg = new ModbusMessage { Reply = reply };
         if (msg.Read(data.GetStream(), null)) return msg;

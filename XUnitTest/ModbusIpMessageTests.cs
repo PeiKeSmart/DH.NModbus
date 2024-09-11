@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using NewLife;
+using NewLife.Data;
 using NewLife.IoT.Protocols;
 using Xunit;
 
@@ -13,7 +14,7 @@ public class ModbusIpMessageTests
         var str = "00-03-00-00-00-06-01-05-00-02-FF-00";
         var dt = str.ToHex();
 
-        var msg = ModbusIpMessage.Read(dt, false);
+        var msg = ModbusIpMessage.Read(new Packet(dt), false);
         Assert.NotNull(msg);
 
         Assert.Equal(1, msg.Host);
@@ -36,7 +37,7 @@ public class ModbusIpMessageTests
         var str = "00-03-00-00-00-06-01-05-00-02-00-00";
         var dt = str.ToHex();
 
-        var msg = ModbusIpMessage.Read(dt, true);
+        var msg = ModbusIpMessage.Read(new Packet(dt), true);
         Assert.NotNull(msg);
 
         Assert.Equal(1, msg.Host);
