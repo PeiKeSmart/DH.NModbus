@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Moq;
 using NewLife;
+using NewLife.Data;
 using NewLife.IoT;
 using NewLife.IoT.Drivers;
 using NewLife.IoT.Protocols;
@@ -87,7 +88,7 @@ public class ModbusDriverTests
         // 模拟Modbus
         var mb = new Mock<Modbus>();
         mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 0, 10))
-            .Returns("12-34-56-78-90-12-34-56-78-90-12-34-56-78-90-12-34-56-78-90".ToHex());
+            .Returns(new Packet("12-34-56-78-90-12-34-56-78-90-12-34-56-78-90-12-34-56-78-90".ToHex()));
         driver.Modbus = mb.Object;
 
         var points = new List<IPoint>();
@@ -201,9 +202,9 @@ public class ModbusDriverTests
         // 模拟Modbus
         var mb = new Mock<Modbus>();
         mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 0, 8))
-            .Returns("12-34-56-78-90-12-34-56-78-90-12-34-56-78-90-12".ToHex());
+            .Returns(new Packet("12-34-56-78-90-12-34-56-78-90-12-34-56-78-90-12".ToHex()));
         mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 8, 2))
-            .Returns("34-56-78-90".ToHex());
+            .Returns(new Packet("34-56-78-90".ToHex()));
         driver.Modbus = mb.Object;
 
         var points = new List<IPoint>();
@@ -247,11 +248,11 @@ public class ModbusDriverTests
         // 模拟Modbus
         var mb = new Mock<Modbus>();
         mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 0, 4))
-            .Returns("12-34-56-78-90-12-34-56".ToHex());
+            .Returns(new Packet("12-34-56-78-90-12-34-56".ToHex()));
         mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 4, 4))
-            .Returns("78-90-12-34-56-78-90-12".ToHex());
+            .Returns(new Packet("78-90-12-34-56-78-90-12".ToHex()));
         mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 8, 2))
-            .Returns("34-56-78-90".ToHex());
+            .Returns(new Packet("34-56-78-90".ToHex()));
         driver.Modbus = mb.Object;
 
         var points = new List<IPoint>();

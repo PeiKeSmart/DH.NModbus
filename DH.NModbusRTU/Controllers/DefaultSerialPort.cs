@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Ports;
+
 using NewLife.Data;
 using NewLife.Net;
 
@@ -102,7 +103,7 @@ public class DefaultSerialPort : DisposeBase, ISerialPort
     /// <param name="request">待发送数据</param>
     /// <param name="minLength">等待响应数据的最小长度，默认1</param>
     /// <returns></returns>
-    public virtual Packet Invoke(Packet? request, Int32 minLength)
+    public virtual IPacket Invoke(IPacket? request, Int32 minLength)
     {
         Open();
 
@@ -112,7 +113,7 @@ public class DefaultSerialPort : DisposeBase, ISerialPort
             _port.DiscardInBuffer();
 
             if (request.Next == null)
-                _port.Write(request.Data, request.Offset, request.Count);
+                _port.Write(request.ReadBytes(), request.Length, request.Total);
             else
                 _port.Write(request.ToArray(), 0, request.Total);
 

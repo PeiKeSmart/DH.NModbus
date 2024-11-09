@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+
+using NewLife.Data;
 using NewLife.IoT.Protocols;
 using NewLife.IoT.ThingModels;
 using NewLife.IoT.ThingSpecification;
