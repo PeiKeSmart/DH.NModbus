@@ -1,0 +1,3 @@
+# WinModbus 演示工具：自定义控件属性无需设计器序列化支持（.NET 11 SDK 下 WFO1000 由警告升级为错误）
+[*.cs]
+dotnet_diagnostic.WFO1000.severity = none

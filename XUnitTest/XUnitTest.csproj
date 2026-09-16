@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <OutputPath>..\Bin\UnitTest</OutputPath>
 
     <IsPackable>false</IsPackable>
@@ -12,6 +12,8 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageReference Include="Moq" Version="4.20.72" />
+    <!-- 竞品交叉兼容测试：NModbus 用作交叉验证 Oracle（仅测试依赖，不污染生产代码） -->
+    <PackageReference Include="NModbus" Version="3.0.83" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
       <PrivateAssets>all</PrivateAssets>
