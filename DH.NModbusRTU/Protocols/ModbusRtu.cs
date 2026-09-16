@@ -63,8 +63,9 @@ public class ModbusRtu : Modbus
         if (parameters.TryGetValue("Baudrate", out str)) Baudrate = str.ToInt();
     }
 
-    /// <summary>打开</summary>
-    public override void Open()
+    /// <summary>异步打开</summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    public override Task OpenAsync(CancellationToken cancellationToken = default)
     {
         if (_port == null)
         {
@@ -82,14 +83,56 @@ public class ModbusRtu : Modbus
 
             WriteLog("ModbusRtu.Open {0} Baudrate={1} DataBits={2} Parity={3} StopBits={4}", PortName, Baudrate, p.DataBits, p.Parity, p.StopBits);
         }
+        return TaskEx.CompletedTask;
     }
 
-    /// <summary>发送消息并接收返回</summary>
-    /// <param name="message">Modbus消息</param>
-    /// <returns></returns>
-    protected override ModbusMessage SendCommand(ModbusMessage message)
+    /// <summary>异步关闭</summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    public override Task CloseAsync(CancellationToken cancellationToken = default)
     {
-        Open();
+        if (_port != null)
+        {
+            _port.Close();
+            _port.TryDispose();
+            _port = null;
+
+            WriteLog("ModbusRtu.Close");
+        }
+        return TaskEx.CompletedTask;
+    }
+
+    /// <summary>异步重连。关闭现有串口后重新打开</summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    protected override async Task ReconnectAsync(CancellationToken cancellationToken)
+    {
+        WriteLog("ModbusRtu.Reconnect");
+
+        await CloseAsync(cancellationToken).ConfigureAwait(false);
+        await OpenAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>异步发送消息并接收返回</summary>
+    /// <param name="message">Modbus消息</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns></returns>
+    protected override Task<ModbusMessage?> SendCommandAsync(ModbusMessage message, CancellationToken cancellationToken)
+    {
+        if (_port == null)
+        {
+            var p = new SerialPort(PortName, Baudrate)
+            {
+                DataBits = DataBits,
+                Parity = Parity,
+                StopBits = StopBits,
+
+                ReadTimeout = Timeout,
+                WriteTimeout = Timeout
+            };
+            p.Open();
+            _port = p;
+
+            WriteLog("ModbusRtu.Open {0} Baudrate={1} DataBits={2} Parity={3} StopBits={4}", PortName, Baudrate, p.DataBits, p.Parity, p.StopBits);
+        }
 
         // 清空缓冲区
         _port.DiscardInBuffer();
@@ -119,31 +162,31 @@ public class ModbusRtu : Modbus
         try
         {
             var count = _port.Read(buf, 0, buf.Length);
-            var pk = new Packet(buf, 0, count);
+            var pk = new ArrayPacket(buf, 0, count);
             Log?.Debug("{0}<= {1}", PortName, pk.ToHex(32, "-"));
 
             if (span != null) span.Tag += Environment.NewLine + pk.ToHex(64, "-");
 
             var len = pk.Total - 2;
-            if (len < 2) return null;
+            if (len < 2) return TaskEx.FromResult<ModbusMessage?>(null);
 
             // 校验Crc
             crc = ModbusHelper.Crc(buf, 0, len);
             var crc2 = buf.ToUInt16(len);
             if (crc != crc2) WriteLog("Crc Error {0:X4}!={1:X4} !", crc, crc2);
 
-            var rs = ModbusRtuMessage.Read(pk, true);
-            if (rs == null) return null;
+            var rs = ModbusRtuMessage.Read(pk.GetSpan(), true);
+            if (rs == null) return TaskEx.FromResult<ModbusMessage?>(null);
 
             Log?.Debug("<= {0}", rs);
 
             // 检查功能码
-            return rs.ErrorCode > 0 ? throw new ModbusException(rs.ErrorCode, rs.ErrorCode + "") : (ModbusMessage)rs;
+            return TaskEx.FromResult(rs.ErrorCode > 0 ? throw new ModbusException(rs.ErrorCode, rs.ErrorCode + "") : (ModbusMessage?)rs);
         }
         catch (Exception ex)
         {
             span?.SetError(ex, null);
-            if (ex is TimeoutException) return null;
+            if (ex is TimeoutException) return TaskEx.FromResult<ModbusMessage?>(null);
             throw;
         }
     }

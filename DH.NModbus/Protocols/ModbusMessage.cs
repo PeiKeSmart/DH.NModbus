@@ -1,11 +1,11 @@
 ﻿using System.Runtime.Serialization;
+using NewLife.Buffers;
 using NewLife.Data;
-using NewLife.Serialization;
 
 namespace NewLife.IoT.Protocols;
 
 /// <summary>Modbus消息</summary>
-public class ModbusMessage : IAccessor
+public class ModbusMessage //: IAccessor
 {
     #region 属性
     /// <summary>是否响应</summary>
@@ -26,7 +26,7 @@ public class ModbusMessage : IAccessor
 
     /// <summary>负载数据</summary>
     [IgnoreDataMember]
-    public Packet Payload { get; set; }
+    public IPacket? Payload { get; set; }
     #endregion
 
     #region 构造
@@ -44,80 +44,86 @@ public class ModbusMessage : IAccessor
     #endregion
 
     #region 方法
-    /// <summary>读取</summary>
-    /// <param name="stream">数据流</param>
-    /// <param name="context">上下文</param>
+    /// <summary>从数据读取消息</summary>
+    /// <param name="reader">读取器</param>
     /// <returns></returns>
-    public virtual Boolean Read(Stream stream, Object context)
+    public virtual Boolean Read(ref SpanReader reader)
     {
-        var binary = context as Binary ?? new Binary { Stream = stream, IsLittleEndian = false };
+        Host = reader.ReadByte();
 
-        Host = binary.ReadByte();
-
-        var b = binary.ReadByte();
+        var b = reader.ReadByte();
         Code = (FunctionCodes)(b & 0x7F);
 
         // 异常码
         if ((b & 0x80) == 0x80)
         {
-            ErrorCode = (ErrorCodes)binary.ReadByte();
+            ErrorCode = (ErrorCodes)reader.ReadByte();
             return true;
         }
 
-        Payload = stream.ReadBytes(-1);
+        if (reader.Available > 0)
+            Payload = (ArrayPacket)reader.ReadBytes(reader.Available).ToArray();
 
         return true;
     }
 
-    /// <summary>解析消息</summary>
-    /// <param name="data">数据包</param>
-    /// <param name="reply">是否响应</param>
+    /// <summary>从数据读取消息</summary>
+    /// <param name="data"></param>
     /// <returns></returns>
-    public static ModbusMessage Read(IPacket data, Boolean reply = false)
+    public virtual Int32 Read(ReadOnlySpan<Byte> data)
     {
-        var msg = new ModbusMessage { Reply = reply };
-        if (msg.Read(data.GetStream(), null)) return msg;
+        var reader = new SpanReader(data) { IsLittleEndian = false };
+        if (!Read(ref reader)) return -1;
 
-        return null;
+        return reader.Position;
     }
 
-    /// <summary>写入消息到数据流</summary>
-    /// <param name="stream">数据流</param>
-    /// <param name="context">上下文</param>
+    /// <summary>写入消息到数据</summary>
+    /// <param name="writer">写入器</param>
     /// <returns></returns>
-    public virtual Boolean Write(Stream stream, Object context)
+    public virtual Boolean Write(ref SpanWriter writer)
     {
-        var binary = context as Binary ?? new Binary { Stream = stream, IsLittleEndian = false };
-
-        binary.Write(Host);
+        writer.Write(Host);
 
         var b = (Byte)Code;
         if (ErrorCode > 0) b |= 0x80;
-        binary.Write(b);
+        writer.Write(b);
 
         // 异常码
         if (ErrorCode > 0)
         {
-            binary.Write((Byte)ErrorCode);
+            writer.Write((Byte)ErrorCode);
             return true;
         }
 
         var pk = Payload;
-        if (pk != null) binary.Write(pk.Data, pk.Offset, pk.Count);
-        //Payload?.CopyTo(binary.Stream);
+        if (pk != null) writer.Write(pk.GetSpan());
 
         return true;
     }
 
+    /// <summary>写入消息到数据</summary>
+    /// <param name="data"></param>
+    /// <returns></returns>
+    public virtual Int32 Writer(Span<Byte> data)
+    {
+        var writer = new SpanWriter(data) { IsLittleEndian = false };
+        if (!Write(ref writer)) return -1;
+
+        return writer.Position;
+    }
+
     /// <summary>消息转数据包</summary>
     /// <returns></returns>
-    public Packet ToPacket()
+    public virtual IPacket ToPacket(Int32 bufferSize = 256)
     {
-        var ms = new MemoryStream();
-        Write(ms, null);
+        var pk = new OwnerPacket(bufferSize);
+        var writer = new SpanWriter(pk.GetSpan()) { IsLittleEndian = false };
+        if (!Write(ref writer)) return null!;
 
-        ms.Position = 0;
-        return new Packet(ms);
+        pk.Resize(writer.Position);
+
+        return pk;
     }
 
     /// <summary>创建响应</summary>
@@ -146,6 +152,8 @@ public class ModbusMessage : IAccessor
     public (UInt16 address, UInt16 count) GetRequest()
     {
         var pk = Payload;
+        if (pk == null || pk.Total < 4) throw new InvalidDataException();
+
         var address = pk.ReadBytes(0, 2).ToUInt16(0, false);
         var count = pk.ReadBytes(2, 2).ToUInt16(0, false);
 
@@ -161,16 +169,19 @@ public class ModbusMessage : IAccessor
         buf.Write(address, 0, false);
         buf.Write(count, 2, false);
 
-        Payload = buf;
+        Payload = (ArrayPacket)buf;
     }
 
     /// <summary>设置请求地址和数据，填充负载数据</summary>
     /// <param name="address"></param>
     /// <param name="data"></param>
-    public void SetRequest(UInt16 address, Packet data)
+    public void SetRequest(UInt16 address, IPacket data)
     {
-        Payload = new Packet(address.GetBytes(false));
-        Payload.Append(data);
+        //Payload = new ArrayPacket(address.GetBytes(false));
+        //Payload.Append(data);
+        var pk = new ArrayPacket(address.GetBytes(false));
+        pk.Next = data;
+        Payload = pk;
     }
     #endregion
 }

@@ -1,5 +1,7 @@
-﻿using NewLife.Data;
-using NewLife.Serialization;
+﻿using NewLife.Buffers;
+using NewLife.Data;
+using NewLife.Reflection;
+using NewLife.Security;
 
 namespace NewLife.IoT.Protocols;
 
@@ -15,55 +17,58 @@ public class ModbusRtuMessage : ModbusMessage
     #endregion
 
     #region 方法
-    /// <summary>读取</summary>
-    /// <param name="stream">数据流</param>
-    /// <param name="context">上下文</param>
+    /// <summary>从数据读取消息</summary>
+    /// <param name="reader">读取器</param>
     /// <returns></returns>
-    public override Boolean Read(Stream stream, Object context)
+    public override Boolean Read(ref SpanReader reader)
     {
-        var binary = context as Binary ?? new Binary { Stream = stream, IsLittleEndian = false };
-
-        var p = stream.Position;
-        if (!base.Read(stream, context ?? binary)) return false;
+        var p = reader.Position;
+        if (!base.Read(ref reader)) return false;
 
         // 从负载数据里把Crc取出来
         var pk = Payload;
         var count = pk?.Total ?? 0;
-        if (count >= 2)
+        if (count >= 2 && pk != null)
         {
             Crc = pk.ReadBytes(count - 2, 2).ToUInt16(0, true);
             Payload = pk.Slice(0, count - 2);
         }
 
-        stream.Position = p;
-        Crc2 = ModbusHelper.Crc(stream, (Int32)(stream.Length - stream.Position - 2));
+        // 计算CRC
+        var p2 = reader.Position - 2;
+        var sp = reader.Span.Slice(p, p2 - p);
+        var buf = sp.ToArray();
+
+        Crc2 = Crc16.ComputeModbus(buf, 0, buf.Length);
 
         return true;
     }
 
-    /// <summary>解析消息</summary>
-    /// <param name="data">数据包</param>
+    /// <summary>从数据读取消息</summary>
+    /// <param name="data">数据</param>
     /// <param name="reply">是否响应</param>
     /// <returns></returns>
-    public static new ModbusRtuMessage Read(Packet data, Boolean reply = false)
+    public static ModbusRtuMessage? Read(ReadOnlySpan<Byte> data, Boolean reply = false)
     {
         var msg = new ModbusRtuMessage { Reply = reply };
-        return msg.Read(data.GetStream(), null) ? msg : null;
+        var reader = new SpanReader(data) { IsLittleEndian = false };
+        return msg.Read(ref reader) ? msg : null;
     }
 
-    /// <summary>写入消息到数据流</summary>
-    /// <param name="stream">数据流</param>
-    /// <param name="context">上下文</param>
+    /// <summary>写入消息到数据</summary>
+    /// <param name="writer">写入器</param>
     /// <returns></returns>
-    public override Boolean Write(Stream stream, Object context)
+    public override Boolean Write(ref SpanWriter writer)
     {
-        var p = stream.Position;
-        if (!base.Write(stream, context)) return false;
+        var p = writer.Position;
+        if (!base.Write(ref writer)) return false;
 
-        stream.Position = p;
-        Crc2 = ModbusHelper.Crc(stream);
+        var size = writer.Position - p;
+        writer.Position = p;
+        Crc2 = ModbusHelper.Crc(writer.Span[..size]);
 
-        stream.Write(Crc2.GetBytes(true));
+        writer.Position = p + size;
+        writer.Write(Crc2.GetBytes(true));
 
         return true;
     }

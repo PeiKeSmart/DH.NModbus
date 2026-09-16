@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-
 using NewLife.Data;
 using NewLife.IoT.Protocols;
 using NewLife.IoT.ThingModels;
@@ -8,18 +7,22 @@ using NewLife.Reflection;
 
 namespace NewLife.IoT.Drivers;
 
-/// <summary>
-/// Modbus协议封装
-/// </summary>
+/// <summary>Modbus协议驱动</summary>
+/// <remarks>
+/// 每个串口或Tcp/Udp从站地址，对应一个Modbus驱动实例，避免多个虚拟设备实例化多个驱动实例导致串口争夺。
+/// 该唯一性由驱动工厂DriverFactory来保证。
+/// </remarks>
 public abstract class ModbusDriver : DriverBase
 {
     #region 属性
     /// <summary>
     /// Modbus通道
     /// </summary>
-    public Modbus Modbus { get; set; }
+    public Modbus Modbus { get; set; } = null!;
 
     private Int32 _nodes;
+
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
     #endregion
 
     #region 构造
@@ -32,7 +35,7 @@ public abstract class ModbusDriver : DriverBase
         base.Dispose(disposing);
 
         Modbus.TryDispose();
-        Modbus = null;
+        Modbus = null!;
     }
     #endregion
 
@@ -54,11 +57,11 @@ public abstract class ModbusDriver : DriverBase
     /// </summary>
     /// <param name="device">通道</param>
     /// <param name="parameter">参数</param>
+    /// <param name="cancellationToken">取消令牌</param>
     /// <returns></returns>
-    public override INode Open(IDevice device, IDriverParameter parameter)
+    public override async Task<INode> OpenAsync(IDevice device, IDriverParameter? parameter, CancellationToken cancellationToken = default)
     {
-        var p = parameter as ModbusParameter;
-        if (p == null) return null;
+        var p = parameter as ModbusParameter ?? new ModbusParameter();
 
         var node = new ModbusNode
         {
@@ -74,7 +77,8 @@ public abstract class ModbusDriver : DriverBase
         // 实例化一次Tcp连接
         if (Modbus == null)
         {
-            lock (this)
+            await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
                 if (Modbus == null)
                 {
@@ -82,11 +86,14 @@ public abstract class ModbusDriver : DriverBase
                     if (p.Timeout > 0) modbus.Timeout = p.Timeout;
 
                     // 外部已指定通道时，打开连接
-                    if (device != null) modbus.Open();
+                    if (device != null) await modbus.OpenAsync(cancellationToken).ConfigureAwait(false);
 
                     Modbus = modbus;
-                    //node.Modbus = modbus;
                 }
+            }
+            finally
+            {
+                _semaphore.Release();
             }
         }
 
@@ -98,13 +105,18 @@ public abstract class ModbusDriver : DriverBase
     /// <summary>
     /// 关闭设备驱动
     /// </summary>
-    /// <param name="node"></param>
-    public override void Close(INode node)
+    /// <param name="node">节点对象</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    public override async Task CloseAsync(INode node, CancellationToken cancellationToken = default)
     {
         if (Interlocked.Decrement(ref _nodes) <= 0)
         {
+            var modbus = Modbus;
+            if (modbus != null)
+                await modbus.CloseAsync(cancellationToken).ConfigureAwait(false);
+
             Modbus.TryDispose();
-            Modbus = null;
+            Modbus = null!;
         }
     }
 
@@ -113,27 +125,27 @@ public abstract class ModbusDriver : DriverBase
     /// </summary>
     /// <param name="node">节点对象，可存储站号等信息，仅驱动自己识别</param>
     /// <param name="points">点位集合</param>
+    /// <param name="cancellationToken">取消令牌</param>
     /// <returns></returns>
-    public override IDictionary<String, Object> Read(INode node, IPoint[] points)
+    public override async Task<ReadResult> ReadAsync(INode node, IPoint[] points, CancellationToken cancellationToken = default)
     {
-        if (points == null || points.Length == 0) return null;
+        if (points == null || points.Length == 0)
+            return ReadResult.Success([], []);
 
-        var n = node as ModbusNode;
-        var p = node.Parameter as ModbusParameter;
+        var n = (node as ModbusNode)!;
+        var p = (node.Parameter as ModbusParameter)!;
 
-        // 组合多个片段，减少读取次数
-        //var merge = p != null && (p.ReadCode == FunctionCodes.ReadRegister || p.ReadCode == FunctionCodes.ReadInput);
         var list = BuildSegments(points, p);
 
         // 加锁，避免冲突
-        lock (Modbus)
+        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
             // 分段整体读取
             for (var i = 0; i < list.Count; i++)
             {
                 var seg = list[i];
 
-                //var code = seg.ReadCode > 0 ? seg.ReadCode : n.ReadCode;
                 if (seg.ReadCode == 0) seg.ReadCode = n.ReadCode;
 
                 // 读取线圈时，个数向8对齐
@@ -146,39 +158,52 @@ public abstract class ModbusDriver : DriverBase
                 // 其中一项读取报错时，直接跳过，不要影响其它批次
                 try
                 {
-                    seg.Data = Modbus.Read(seg.ReadCode, n.Host, (UInt16)seg.Address, (UInt16)seg.Count)?.ReadBytes();
-
-                    //var x = seg.Data.Join(" ", e => e.ToHex());
+                    seg.Data = (await Modbus.ReadAsync(seg.ReadCode, n.Host, (UInt16)seg.Address, (UInt16)seg.Count, cancellationToken).ConfigureAwait(false))?.ReadBytes();
                 }
-                catch (Exception ex)
+                catch (ModbusException ex)
                 {
                     Log?.Error(ex.ToString());
                 }
 
                 // 读取时延迟一点时间
-                if (i < list.Count - 1 && p.BatchDelay > 0) Thread.Sleep(p.BatchDelay);
+                if (i < list.Count - 1 && p.BatchDelay > 0) await Task.Delay(p.BatchDelay, cancellationToken).ConfigureAwait(false);
             }
+        }
+        finally
+        {
+            _semaphore.Release();
         }
 
         // 分割数据
-        var rs = Dispatch(points, list);
+        var dic = Dispatch(points, list);
 
         // 借助物模型转换数据类型
         var spec = node.Device?.Specification;
         if (spec != null)
         {
-            foreach (var item in rs)
+            foreach (var item in dic)
             {
                 var pt = points.FirstOrDefault(e => e.Name == item.Key);
                 if (pt != null && item.Value is Byte[] data)
                 {
-                    var v = spec.DecodeByThingModel(data, pt);
-                    if (v != null) rs[item.Key] = v;
+                    var v = spec.Decode(data, pt);
+                    if (v != null) dic[item.Key] = v;
                 }
             }
         }
 
-        return rs;
+        // 构造 ReadResult
+        var resultPoints = new IPoint[dic.Count];
+        var resultValues = new Object?[dic.Count];
+        var idx = 0;
+        foreach (var kv in dic)
+        {
+            resultPoints[idx] = points.First(e => (e.Name ?? e.Address) == kv.Key);
+            resultValues[idx] = kv.Value;
+            idx++;
+        }
+
+        return ReadResult.Success(resultPoints, resultValues);
     }
 
     internal IList<Segment> BuildSegments(IList<IPoint> points, ModbusParameter p)
@@ -187,7 +212,7 @@ public abstract class ModbusDriver : DriverBase
         var list = new List<Segment>();
         foreach (var point in points)
         {
-            if (ModbusAddress.TryParse(point.Address, out var maddr))
+            if (!point.Address.IsNullOrEmpty() && ModbusAddress.TryParse(point.Address, out var maddr))
             {
                 list.Add(new Segment
                 {
@@ -252,42 +277,43 @@ public abstract class ModbusDriver : DriverBase
         return rs;
     }
 
-    internal IDictionary<String, Object> Dispatch(IPoint[] points, IList<Segment> segments)
+    internal IDictionary<String, Object?> Dispatch(IPoint[] points, IList<Segment> segments)
     {
-        var dic = new Dictionary<String, Object>();
+        var dic = new Dictionary<String, Object?>();
         if (segments == null || segments.Count == 0) return dic;
 
         foreach (var point in points)
         {
-            if (ModbusAddress.TryParse(point.Address, out var maddr))
-            {
-                var count = GetCount(point);
+            if (point.Address.IsNullOrEmpty() || !ModbusAddress.TryParse(point.Address, out var maddr))
+                continue;
 
-                // 找到片段 需要补充类型过滤参数避免不同类型相同地址取值错误问题
-                var seg = segments.FirstOrDefault(e => e.Address <= maddr.Address && maddr.Address + count <= e.Address + e.Count && (maddr.Range == null || e.ReadCode == maddr.Range.ReadCode));
-                if (seg != null && seg.Data != null)
+            var name = point.Name ?? point.Address;
+            var count = GetCount(point);
+
+            // 找到片段 需要补充类型过滤参数避免不同类型相同地址取值错误问题
+            var seg = segments.FirstOrDefault(e => e.Address <= maddr.Address && maddr.Address + count <= e.Address + e.Count && (maddr.Range == null || e.ReadCode == maddr.Range.ReadCode));
+            if (seg != null && seg.Data != null)
+            {
+                var code = seg.ReadCode;
+                if (code is FunctionCodes.ReadRegister or FunctionCodes.ReadInput)
                 {
-                    var code = seg.ReadCode;
-                    if (code is FunctionCodes.ReadRegister or FunctionCodes.ReadInput)
-                    {
-                        // 校验数据完整性
-                        var offset = (maddr.Address - seg.Address) * 2;
-                        var size = count * 2;
-                        if (seg.Data.Length >= offset + size)
-                            dic[point.Name] = seg.Data.ReadBytes(offset, size);
-                    }
-                    else if (code is FunctionCodes.ReadCoil or FunctionCodes.ReadDiscrete)
-                    {
-                        // 计算偏移，每8位一个字节，地址低3位是该字节内的偏移量
-                        var offset = maddr.Address - seg.Address;
-                        var idx = offset >> 3;
-                        offset &= 0x07;
-                        if (seg.Data.Length >= idx)
-                            dic[point.Name] = (seg.Data[idx] >> offset) & 0x01;
-                    }
-                    else
-                        throw new NotSupportedException($"无法拆分{code}");
+                    // 校验数据完整性
+                    var offset = (maddr.Address - seg.Address) * 2;
+                    var size = count * 2;
+                    if (seg.Data.Length >= offset + size)
+                        dic[name] = seg.Data.ReadBytes(offset, size);
                 }
+                else if (code is FunctionCodes.ReadCoil or FunctionCodes.ReadDiscrete)
+                {
+                    // 计算偏移，每8位一个字节，地址低3位是该字节内的偏移量
+                    var offset = maddr.Address - seg.Address;
+                    var idx = offset >> 3;
+                    offset &= 0x07;
+                    if (seg.Data.Length >= idx)
+                        dic[name] = (seg.Data[idx] >> offset) & 0x01;
+                }
+                else
+                    throw new NotSupportedException($"无法拆分{code}");
             }
         }
         return dic;
@@ -297,9 +323,12 @@ public abstract class ModbusDriver : DriverBase
     internal class Segment
     {
         public FunctionCodes ReadCode { get; set; }
+
         public Int32 Address { get; set; }
+
         public Int32 Count { get; set; }
-        public Byte[] Data { get; set; }
+
+        public Byte[]? Data { get; set; }
     }
 
     /// <summary>
@@ -318,50 +347,72 @@ public abstract class ModbusDriver : DriverBase
     /// 写入数据
     /// </summary>
     /// <param name="node">节点对象，可存储站号等信息，仅驱动自己识别</param>
-    /// <param name="point">点位</param>
-    /// <param name="value">数值</param>
-    public override Object Write(INode node, IPoint point, Object value)
+    /// <param name="requests">写入请求数组，每项含目标点位和值</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    public override async Task<WriteResult> WriteAsync(INode node, WriteRequest[] requests, CancellationToken cancellationToken = default)
     {
-        if (value == null) return null;
-        if (!ModbusAddress.TryParse(point.Address, out var maddr)) return null;
-
-        var n = node as ModbusNode;
-        var code = maddr.GetWriteCode();
-        if (code == 0) code = n.WriteCode;
-
-        // 借助物模型转换数据类型
+        var n = (node as ModbusNode)!;
         var spec = node.Device?.Specification;
-        if (spec != null && value is not Byte[])
-        {
-            // 普通数值转为字节数组
-            value = spec.EncodeByThingModel(value, point);
-        }
+        var count = 0;
 
-        UInt16[] vs;
-        if (value is Byte[] buf)
+        foreach (var req in requests)
         {
-            vs = new UInt16[(Int32)Math.Ceiling(buf.Length / 2d)];
-            for (var i = 0; i < vs.Length; i++)
+            var point = req.Point;
+            var value = req.Value;
+
+            if (value == null || point == null) continue;
+            if (point.Address.IsNullOrEmpty()) continue;
+            if (!ModbusAddress.TryParse(point.Address, out var maddr)) continue;
+
+            var code = maddr.GetWriteCode();
+            if (code == 0) code = n.WriteCode;
+
+            // 借助物模型转换数据类型
+            if (spec != null && value is not Byte[])
             {
-                vs[i] = buf.ToUInt16(i * 2, false);
+                value = spec.Encode(value, point);
             }
-        }
-        else
-        {
-            // 根据写入操作码决定转换为线圈还是寄存器
-            if (code == FunctionCodes.WriteCoil || code == FunctionCodes.WriteCoils)
-                vs = ConvertToCoil(value, point, spec);
+
+            UInt16[] vs;
+            if (value is Byte[] buf)
+            {
+                vs = new UInt16[(Int32)Math.Ceiling(buf.Length / 2d)];
+                for (var i = 0; i < vs.Length; i++)
+                {
+                    vs[i] = buf.ToUInt16(i * 2, false);
+                }
+            }
             else
-                vs = ConvertToRegister(value, point, spec);
+            {
+                // 根据写入操作码决定转换为线圈还是寄存器
+                if (code == FunctionCodes.WriteCoil || code == FunctionCodes.WriteCoils)
+                    vs = ConvertToCoil(value, point, spec);
+                else
+                    vs = ConvertToRegister(value, point, spec);
 
-            if (vs == null) throw new NotSupportedException($"点位[{point.Name}][Type={point.Type}]不支持数据[{value}]");
+                if (vs == null || vs.Length == 0) throw new NotSupportedException($"点位[{point.Name}][Type={point.Type}]不支持数据[{value}]");
+            }
+
+            // 加锁，避免冲突
+            Object? echo;
+            await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                echo = await Modbus.WriteAsync(code, n.Host, maddr.Address, vs, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+
+            // 单点写入：直接返回成功带回显
+            if (requests.Length == 1)
+                return WriteResult.Success(echo);
+
+            count++;
         }
 
-        // 加锁，避免冲突
-        lock (Modbus)
-        {
-            return Modbus.Write(code, n.Host, maddr.Address, vs);
-        }
+        return WriteResult.SuccessBatch(count);
     }
 
     /// <summary>原始数据转为线圈</summary>
@@ -369,7 +420,7 @@ public abstract class ModbusDriver : DriverBase
     /// <param name="point"></param>
     /// <param name="spec"></param>
     /// <returns></returns>
-    protected virtual UInt16[] ConvertToCoil(Object data, IPoint point, ThingSpec spec)
+    protected virtual UInt16[] ConvertToCoil(Object? data, IPoint point, ThingSpec? spec)
     {
         var type = TypeHelper.GetNetType(point);
         if (type == null)
@@ -378,25 +429,15 @@ public abstract class ModbusDriver : DriverBase
             var pi = spec?.Properties?.FirstOrDefault(e => e.Id.EqualIgnoreCase(point.Name));
             type = TypeHelper.GetNetType(pi?.DataType?.Type);
         }
-        if (type == null) return null;
+        if (type == null) return [];
 
-        switch (type.GetTypeCode())
+        return type.GetTypeCode() switch
         {
-            case TypeCode.Boolean:
-            case TypeCode.Byte:
-            case TypeCode.SByte:
-                return data.ToBoolean() ? [(UInt16)0xFF00] : [(UInt16)0x00];
-            case TypeCode.Int16:
-            case TypeCode.UInt16:
-            case TypeCode.Int32:
-            case TypeCode.UInt32:
-                return data.ToInt() > 0 ? [(UInt16)0xFF00] : [(UInt16)0x00];
-            case TypeCode.Int64:
-            case TypeCode.UInt64:
-                return data.ToLong() > 0 ? [(UInt16)0xFF00] : [(UInt16)0x00];
-            default:
-                return data.ToBoolean() ? [(UInt16)0xFF00] : [(UInt16)0x00];
-        }
+            TypeCode.Boolean or TypeCode.Byte or TypeCode.SByte => data.ToBoolean() ? [0xFF00] : [0x00],
+            TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 => data.ToInt() > 0 ? [0xFF00] : [0x00],
+            TypeCode.Int64 or TypeCode.UInt64 => data.ToLong() > 0 ? [0xFF00] : [0x00],
+            _ => data.ToBoolean() ? [0xFF00] : [0x00],
+        };
     }
 
     /// <summary>原始数据转寄存器数组</summary>
@@ -404,7 +445,7 @@ public abstract class ModbusDriver : DriverBase
     /// <param name="point"></param>
     /// <param name="spec"></param>
     /// <returns></returns>
-    protected virtual UInt16[] ConvertToRegister(Object data, IPoint point, ThingSpec spec)
+    protected virtual UInt16[] ConvertToRegister(Object? data, IPoint point, ThingSpec? spec)
     {
         var type = TypeHelper.GetNetType(point);
         if (type == null)
@@ -413,14 +454,14 @@ public abstract class ModbusDriver : DriverBase
             var pi = spec?.Properties?.FirstOrDefault(e => e.Id.EqualIgnoreCase(point.Name));
             type = TypeHelper.GetNetType(pi?.DataType?.Type);
         }
-        if (type == null) return null;
+        if (type == null) return [];
 
         switch (type.GetTypeCode())
         {
             case TypeCode.Boolean:
             case TypeCode.Byte:
             case TypeCode.SByte:
-                return data.ToBoolean() ? [(UInt16)0xFF00] : [(UInt16)0x00];
+                return data.ToBoolean() ? [0xFF00] : [0x00];
             case TypeCode.Int16:
             case TypeCode.UInt16:
                 return [(UInt16)data.ToInt()];
@@ -459,7 +500,7 @@ public abstract class ModbusDriver : DriverBase
             //case TypeCode.String:
             //    break;
             default:
-                return null;
+                return [];
         }
     }
 

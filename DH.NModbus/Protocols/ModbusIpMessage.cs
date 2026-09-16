@@ -1,5 +1,4 @@
-﻿using NewLife.Data;
-using NewLife.Serialization;
+﻿using NewLife.Buffers;
 
 namespace NewLife.IoT.Protocols;
 
@@ -15,49 +14,44 @@ public class ModbusIpMessage : ModbusMessage
     #endregion
 
     #region 方法
-    /// <summary>读取</summary>
-    /// <param name="stream">数据流</param>
-    /// <param name="context">上下文</param>
+    /// <summary>从数据读取消息</summary>
+    /// <param name="reader">读取器</param>
     /// <returns></returns>
-    public override Boolean Read(Stream stream, Object context)
+    public override Boolean Read(ref SpanReader reader)
     {
-        var binary = context as Binary ?? new Binary { Stream = stream, IsLittleEndian = false };
+        TransactionId = reader.ReadUInt16();
+        ProtocolId = reader.ReadUInt16();
 
-        TransactionId = binary.Read<UInt16>();
-        ProtocolId = binary.Read<UInt16>();
+        var len = reader.ReadUInt16();
+        if (len < 1 + 1 || len > reader.Available) return false;
 
-        var len = binary.Read<UInt16>();
-        if (len < 1 + 1 || stream.Position + len > stream.Length) return false;
-
-        return base.Read(stream, context ?? binary);
+        return base.Read(ref reader);
     }
 
-    /// <summary>解析消息</summary>
-    /// <param name="data">数据包</param>
+    /// <summary>从数据读取消息</summary>
+    /// <param name="data">数据</param>
     /// <param name="reply">是否响应</param>
     /// <returns></returns>
-    public new static ModbusIpMessage Read(IPacket data, Boolean reply = false)
+    public static ModbusIpMessage? Read(ReadOnlySpan<Byte> data, Boolean reply = false)
     {
         var msg = new ModbusIpMessage { Reply = reply };
-        return msg.Read(data.GetStream(), null) ? msg : null;
+        var reader = new SpanReader(data) { IsLittleEndian = false };
+        return msg.Read(ref reader) ? msg : null;
     }
 
-    /// <summary>写入消息到数据流</summary>
-    /// <param name="stream">数据流</param>
-    /// <param name="context">上下文</param>
+    /// <summary>写入消息到数据</summary>
+    /// <param name="writer">写入器</param>
     /// <returns></returns>
-    public override Boolean Write(Stream stream, Object context)
+    public override Boolean Write(ref SpanWriter writer)
     {
-        var binary = context as Binary ?? new Binary { Stream = stream, IsLittleEndian = false };
-
-        binary.Write(TransactionId);
-        binary.Write(ProtocolId);
+        writer.Write(TransactionId);
+        writer.Write(ProtocolId);
 
         var pk = Payload;
         var len = 2 + (pk?.Total ?? 0);
-        binary.Write((UInt16)len);
+        writer.Write((UInt16)len);
 
-        return base.Write(stream, context ?? binary);
+        return base.Write(ref writer);
     }
 
     /// <summary>创建响应</summary>

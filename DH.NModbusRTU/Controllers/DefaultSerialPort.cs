@@ -2,7 +2,6 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Ports;
-
 using NewLife.Data;
 using NewLife.Net;
 
@@ -11,6 +10,7 @@ namespace NewLife.IoT.Controllers;
 /// <summary>默认串口实现</summary>
 public class DefaultSerialPort : DisposeBase, ISerialPort
 {
+    #region 属性
     /// <summary>串口名</summary>
     public String PortName { get; set; } = null!;
 
@@ -32,6 +32,7 @@ public class DefaultSerialPort : DisposeBase, ISerialPort
     private SerialPort? _port;
     /// <summary>串口对象</summary>
     public Object Port => _port ??= new(PortName, Baudrate) { ReadTimeout = Timeout, WriteTimeout = Timeout };
+    #endregion
 
     /// <summary>销毁</summary>
     /// <param name="disposing"></param>
@@ -39,32 +40,42 @@ public class DefaultSerialPort : DisposeBase, ISerialPort
     {
         base.Dispose(disposing);
 
-        if (_port != null)
-        {
-            if (Received != null) _port.DataReceived -= OnReceiveSerial;
-
-            _port.TryDispose();
-        }
+        Close();
     }
 
     /// <summary>打开</summary>
     [MemberNotNull(nameof(_port))]
     public virtual void Open()
     {
-        if (_port != null) return;
+        if (_port != null && _port.IsOpen) return;
 
         if (PortName.IsNullOrEmpty()) throw new ArgumentNullException(nameof(PortName));
         if (Baudrate == 0) Baudrate = 9600;
 
-        _port = new SerialPort(PortName, Baudrate)
+        if (_port == null)
         {
-            ReadTimeout = Timeout,
-            WriteTimeout = Timeout
-        };
+            _port = new SerialPort(PortName, Baudrate)
+            {
+                ReadTimeout = Timeout,
+                WriteTimeout = Timeout
+            };
 
-        if (Received != null) _port.DataReceived += OnReceiveSerial;
+            if (Received != null) _port.DataReceived += OnReceiveSerial;
+        }
 
         _port.Open();
+    }
+
+    /// <summary>关闭</summary>
+    public virtual void Close()
+    {
+        if (_port != null)
+        {
+            if (Received != null) _port.DataReceived -= OnReceiveSerial;
+
+            _port.Close();
+            _port = null;
+        }
     }
 
     void OnReceiveSerial(Object sender, SerialDataReceivedEventArgs e)
@@ -73,6 +84,9 @@ public class DefaultSerialPort : DisposeBase, ISerialPort
         if (rs != null)
         {
             Received?.Invoke(this, new ReceivedEventArgs { Packet = rs });
+
+            // 回收内存池
+            rs.TryDispose();
         }
     }
 
@@ -112,10 +126,10 @@ public class DefaultSerialPort : DisposeBase, ISerialPort
             // 清空缓冲区
             _port.DiscardInBuffer();
 
-            if (request.Next == null)
-                _port.Write(request.ReadBytes(), request.Length, request.Total);
+            if (request.Next == null && request is ArrayPacket ap)
+                _port.Write(ap.Buffer, ap.Offset, ap.Length);
             else
-                _port.Write(request.ToArray(), 0, request.Total);
+                _port.Write(request.ReadBytes(), 0, request.Total);
 
             if (ByteTimeout > 10) Thread.Sleep(ByteTimeout);
         }
@@ -123,10 +137,11 @@ public class DefaultSerialPort : DisposeBase, ISerialPort
         // 串口速度较慢，等待收完数据
         WaitMore(_port, minLength);
 
-        var buf = new Byte[BufferSize];
-        var rs = _port.Read(buf, 0, buf.Length);
+        var p = new OwnerPacket(BufferSize);
+        var rs = _port.Read(p.Buffer, p.Offset, p.Length);
+        p.Resize(rs);
 
-        return new Packet(buf, 0, rs);
+        return p;
     }
 
     private void WaitMore(SerialPort sp, Int32 minLength)

@@ -27,13 +27,13 @@ public partial class OutputPort : UserControl
 
     }
 
-    private void btnOpen_Click(Object sender, EventArgs e)
+    private async void btnOpen_Click(Object sender, EventArgs e)
     {
-        Modbus.WriteCoil(Host, (UInt16)Address, 0xFF00);
+        await Modbus.WriteCoilAsync(Host, (UInt16)Address, 0xFF00);
     }
 
-    private void btnClose_Click(Object sender, EventArgs e)
+    private async void btnClose_Click(Object sender, EventArgs e)
     {
-        Modbus.WriteCoil(Host, (UInt16)Address, 0x0000);
+        await Modbus.WriteCoilAsync(Host, (UInt16)Address, 0x0000);
     }
 }

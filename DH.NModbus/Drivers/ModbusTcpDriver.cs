@@ -1,11 +1,17 @@
 ﻿using System.ComponentModel;
+using System.Security.Cryptography.X509Certificates;
 using NewLife.IoT.Protocols;
 
 namespace NewLife.IoT.Drivers;
 
 /// <summary>TCP网络版Modbus</summary>
+/// <remarks>
+/// 每个Tcp/Udp从站地址，对应一个Modbus驱动实例，避免多个虚拟设备实例化多个驱动实例导致网络连接过多。
+/// 该唯一性由驱动工厂DriverFactory来保证。
+/// 配置 <see cref="ModbusTcpParameter.SslProtocol"/> 后自动启用 TLS 安全传输。
+/// </remarks>
 [Driver("ModbusTcp")]
-[DisplayName("TCP网络版ModbusTcp")]
+[DisplayName("TCP网络版Modbus")]
 public class ModbusTcpDriver : ModbusDriver, IDriver
 {
     #region 方法
@@ -36,15 +42,32 @@ public class ModbusTcpDriver : ModbusDriver, IDriver
 
         node.Parameter = p;
 
-        var modbus = new ModbusTcp
-        {
-            Server = p.Server,
-            ProtocolId = p.ProtocolId,
+        // Enron 模式使用 ModbusEnron 驱动（32位浮点寄存器）
+        ModbusTcp modbus = p.IsEnron
+            ? new ModbusEnron
+            {
+                Server = p.Server,
+                ProtocolId = p.ProtocolId,
+                SslProtocol = p.SslProtocol,
+                Tracer = Tracer,
+                Log = Log,
+            }
+            : new ModbusTcp
+            {
+                Server = p.Server,
+                ProtocolId = p.ProtocolId,
+                SslProtocol = p.SslProtocol,
+                Tracer = Tracer,
+                Log = Log,
+            };
 
-            Tracer = Tracer,
-            Log = Log,
-        };
-        //modbus.Init(parameters);
+        // 加载客户端证书（可选），仅当文件存在时加载
+        if (!p.CertificateFile.IsNullOrEmpty() && File.Exists(p.CertificateFile))
+        {
+            modbus.Certificate = p.CertificatePassword.IsNullOrEmpty()
+                ? new X509Certificate2(p.CertificateFile)
+                : new X509Certificate2(p.CertificateFile, p.CertificatePassword);
+        }
 
         return modbus;
     }

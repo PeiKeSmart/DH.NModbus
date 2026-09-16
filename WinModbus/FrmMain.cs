@@ -26,7 +26,7 @@ public partial class FrmMain : Form
         };
     }
 
-    private void btnConnect_Click(Object sender, EventArgs e)
+    private async void btnConnect_Click(Object sender, EventArgs e)
     {
         var btn = sender as Button;
         if (btn.Text == "连接")
@@ -38,7 +38,7 @@ public partial class FrmMain : Form
                 Log = _log,
             };
 
-            _modbus.Open();
+            await _modbus.OpenAsync();
 
             btn.Text = "断开";
             groupBox1.Enabled = false;
@@ -56,7 +56,7 @@ public partial class FrmMain : Form
         }
     }
 
-    private void btnConnect2_Click(Object sender, EventArgs e)
+    private async void btnConnect2_Click(Object sender, EventArgs e)
     {
         var btn = sender as Button;
         if (btn.Text == "连接")
@@ -67,7 +67,7 @@ public partial class FrmMain : Form
                 Log = _log,
             };
 
-            _modbus.Open();
+            await _modbus.OpenAsync();
 
             btn.Text = "断开";
             groupBox1.Enabled = false;

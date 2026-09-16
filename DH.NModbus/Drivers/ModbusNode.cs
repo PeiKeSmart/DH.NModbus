@@ -20,11 +20,14 @@ public class ModbusNode : INode
     public FunctionCodes WriteCode { get; set; }
 
     /// <summary>通道</summary>
-    public IDriver Driver { get; set; }
+    public IDriver Driver { get; set; } = null!;
 
     /// <summary>设备</summary>
-    public IDevice Device { get; set; }
+    public IDevice? Device { get; set; }
 
     /// <summary>参数</summary>
-    public IDriverParameter Parameter { get; set; }
+    public IDriverParameter? Parameter { get; set; }
+
+    /// <summary>是否已连接。驱动维护的连接状态</summary>
+    public Boolean IsConnected => (Driver as ModbusDriver)?.Modbus != null;
 }

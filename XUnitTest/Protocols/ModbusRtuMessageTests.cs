@@ -1,17 +1,13 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using NewLife;
 using NewLife.Data;
 using NewLife.IoT.Protocols;
 using Xunit;
 
-namespace XUnitTest;
+namespace XUnitTest.Protocols;
 
-public class ModbusMessageTests
+public class ModbusRtuMessageTests
 {
     [Fact]
     public void Test1()
@@ -19,7 +15,7 @@ public class ModbusMessageTests
         var str = "01-05-00-02-FF-00-2D-FA";
         var dt = str.ToHex();
 
-        var msg = ModbusMessage.Read(new Packet(dt), false);
+        var msg = ModbusRtuMessage.Read(dt, false);
         Assert.NotNull(msg);
 
         Assert.Equal(1, msg.Host);
@@ -28,7 +24,9 @@ public class ModbusMessageTests
         Assert.Equal((ErrorCodes)0, msg.ErrorCode);
         Assert.Equal(0x02, msg.GetAddress());
         Assert.Equal(0xFF00, msg.Payload.ReadBytes(2, 2).ToUInt16(0, false));
-        Assert.Equal("WriteCoil (0x0002, FF002DFA)", msg.ToString());
+        Assert.Equal(0xFA2D, msg.Crc);
+        Assert.Equal(msg.Crc, msg.Crc2);
+        Assert.Equal("WriteCoil (0x0002, FF00)", msg.ToString());
 
         var pk = msg.ToPacket();
         Assert.Equal(str, pk.ToHex(256, "-"));
@@ -40,8 +38,7 @@ public class ModbusMessageTests
         var str = "01-05-00-02-00-00-6C-0A";
         var dt = str.ToHex();
 
-        var msg = new ModbusMessage { Reply = true };
-        msg.Read(new MemoryStream(dt), null);
+        var msg = ModbusRtuMessage.Read(dt, true);
         Assert.NotNull(msg);
 
         Assert.Equal(1, msg.Host);
@@ -50,19 +47,21 @@ public class ModbusMessageTests
         Assert.Equal((ErrorCodes)0, msg.ErrorCode);
         Assert.Equal(0x02, msg.GetAddress());
         Assert.Equal(0x0000, msg.Payload.ReadBytes(2, 2).ToUInt16(0, false));
-        Assert.Equal("WriteCoil 000200006C0A", msg.ToString());
+        Assert.Equal(0x0A6C, msg.Crc);
+        Assert.Equal("WriteCoil 00020000", msg.ToString());
 
-        var ms = new MemoryStream();
-        msg.Write(ms, null);
-        Assert.Equal(str, ms.ToArray().ToHex("-"));
+        var buf = new Byte[1024];
+        var count = msg.Writer(buf);
+        Assert.Equal(str, buf.ToHex("-", 0, count));
     }
 
     [Fact]
     public void CreateReply()
     {
-        var msg = new ModbusMessage { Code = FunctionCodes.ReadRegister };
+        var msg = new ModbusRtuMessage { Code = FunctionCodes.ReadRegister };
         var rs = msg.CreateReply();
 
+        Assert.True(rs is ModbusRtuMessage);
         Assert.True(rs.Reply);
         Assert.Equal(msg.Code, rs.Code);
     }
@@ -70,7 +69,7 @@ public class ModbusMessageTests
     [Fact]
     public void Set()
     {
-        var msg = new ModbusMessage { Code = FunctionCodes.WriteRegister };
+        var msg = new ModbusRtuMessage { Code = FunctionCodes.WriteRegister };
 
         msg.SetRequest(0x0002, 0xABCD);
 

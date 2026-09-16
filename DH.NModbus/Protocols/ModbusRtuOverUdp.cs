@@ -19,17 +19,20 @@ public class ModbusRtuOverUdp : ModbusIp
     /// <returns></returns>
     protected override ModbusMessage CreateMessage() => new ModbusRtuMessage();
 
-    /// <summary>接收响应</summary>
+    /// <summary>异步接收响应</summary>
+    /// <param name="cancellationToken">取消令牌</param>
     /// <returns></returns>
-    protected override Packet ReceiveCommand()
+    protected override async Task<IOwnerPacket?> ReceiveCommandAsync(CancellationToken cancellationToken = default)
     {
+        await OpenAsync(cancellationToken).ConfigureAwait(false);
+
         // 设置协议最短长度，避免读取指令不完整。由于请求响应机制，不存在粘包返回。
         var dataLength = 4; // 1+1+2
-        Packet pk = null;
+        IOwnerPacket? pk = null;
         for (var i = 0; i < 3; i++)
         {
             // 阻塞读取
-            var pk2 = (Packet)_client.Receive();
+            var pk2 = _client.Receive();
             if (pk2 == null || pk2.Total == 0) continue;
 
             if (pk == null)
@@ -48,11 +51,11 @@ public class ModbusRtuOverUdp : ModbusIp
     /// <param name="data">目标数据包</param>
     /// <param name="match">是否匹配请求</param>
     /// <returns>响应消息</returns>
-    protected override ModbusMessage ReadMessage(ModbusMessage request, Packet data, out Boolean match)
+    protected override ModbusMessage? ReadMessage(ModbusMessage request, IPacket data, out Boolean match)
     {
         match = true;
 
-        var rs = ModbusRtuMessage.Read(data, true);
+        var rs = ModbusRtuMessage.Read(data.GetSpan(), true);
         if (rs == null) return null;
 
         Log?.Debug("<= {0}", rs);

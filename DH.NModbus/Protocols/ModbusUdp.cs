@@ -41,11 +41,11 @@ public class ModbusUdp : ModbusIp
     /// <param name="data">目标数据包</param>
     /// <param name="match">是否匹配请求</param>
     /// <returns>响应消息</returns>
-    protected override ModbusMessage ReadMessage(ModbusMessage request, Packet data, out Boolean match)
+    protected override ModbusMessage? ReadMessage(ModbusMessage request, IPacket data, out Boolean match)
     {
         match = true;
 
-        var rs = ModbusIpMessage.Read(data, true);
+        var rs = ModbusIpMessage.Read(data.GetSpan(), true);
         if (rs == null) return null;
 
         Log?.Debug("<= {0}", rs);

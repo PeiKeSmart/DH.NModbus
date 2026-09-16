@@ -1,10 +1,11 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using NewLife;
 using NewLife.Data;
 using NewLife.IoT.Protocols;
 using Xunit;
 
-namespace XUnitTest;
+namespace XUnitTest.Protocols;
 
 public class ModbusIpMessageTests
 {
@@ -14,7 +15,7 @@ public class ModbusIpMessageTests
         var str = "00-03-00-00-00-06-01-05-00-02-FF-00";
         var dt = str.ToHex();
 
-        var msg = ModbusIpMessage.Read(new Packet(dt), false);
+        var msg = ModbusIpMessage.Read(dt, false);
         Assert.NotNull(msg);
 
         Assert.Equal(1, msg.Host);
@@ -37,7 +38,7 @@ public class ModbusIpMessageTests
         var str = "00-03-00-00-00-06-01-05-00-02-00-00";
         var dt = str.ToHex();
 
-        var msg = ModbusIpMessage.Read(new Packet(dt), true);
+        var msg = ModbusIpMessage.Read(dt, true);
         Assert.NotNull(msg);
 
         Assert.Equal(1, msg.Host);
@@ -50,9 +51,9 @@ public class ModbusIpMessageTests
         Assert.Equal(0, msg.ProtocolId);
         Assert.Equal("WriteCoil 00020000", msg.ToString());
 
-        var ms = new MemoryStream();
-        msg.Write(ms, null);
-        Assert.Equal(str, ms.ToArray().ToHex("-"));
+        var buf = new Byte[1024];
+        var count = msg.Writer(buf);
+        Assert.Equal(str, buf.ToHex("-", 0, count));
     }
 
     [Fact]

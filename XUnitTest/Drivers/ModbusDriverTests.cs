@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Linq;
 using Moq;
@@ -11,7 +12,7 @@ using NewLife.IoT.ThingModels;
 using NewLife.Security;
 using Xunit;
 
-namespace XUnitTest;
+namespace XUnitTest.Drivers;
 
 public class ModbusDriverTests
 {
@@ -41,15 +42,17 @@ public class ModbusDriverTests
         Assert.Equal(p.Host, node2.Host);
         Assert.Equal(p.ReadCode, node2.ReadCode);
         Assert.Equal(p.WriteCode, node2.WriteCode);
+        Assert.Equal(driver, node2.Driver);
+        Assert.Equal(p, node2.Parameter);
+
+        // Open时没有传入device
         Assert.Null(node2.Device);
 
         var modbus = driver.Modbus as ModbusTcp;
         Assert.NotNull(modbus);
         Assert.Equal(p.Server, modbus.Server);
         Assert.Equal(p.Timeout, modbus.Timeout);
-        Assert.Equal(256, modbus.BufferSize);
-        //Assert.Equal(p.BatchSize, modbus.BatchSize);
-        //Assert.Equal(p.Delay, modbus.Delay);
+        Assert.Equal(1024, modbus.BufferSize);
     }
 
     [Fact]
@@ -72,6 +75,7 @@ public class ModbusDriverTests
         driver.Close(node1);
         Assert.NotNull(driver.Modbus);
 
+        // 二次关闭后，才释放Modbus
         driver.Close(node2);
         Assert.Null(driver.Modbus);
     }
@@ -86,9 +90,9 @@ public class ModbusDriverTests
         var node = driver.Open(null, p);
 
         // 模拟Modbus
-        var mb = new Mock<Modbus>();
-        mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 0, 10))
-            .Returns(new Packet("12-34-56-78-90-12-34-56-78-90-12-34-56-78-90-12-34-56-78-90".ToHex()));
+        var mb = new Mock<Modbus> { CallBase = true };
+        mb.Setup(e => e.ReadAsync(FunctionCodes.ReadRegister, 1, 0, 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ArrayPacket)"12-34-56-78-90-12-34-56-78-90-12-34-56-78-90-12-34-56-78-90".ToHex());
         driver.Modbus = mb.Object;
 
         var points = new List<IPoint>();
@@ -106,13 +110,13 @@ public class ModbusDriverTests
 
         // 读取
         var rs = driver.Read(node, points.ToArray());
-        Assert.NotNull(rs);
-        Assert.Equal(10, rs.Count);
+        Assert.True(rs.IsSuccess);
+        Assert.Equal(10, rs.Points.Length);
 
         for (var i = 0; i < 10; i++)
         {
             var name = "p" + i;
-            Assert.True(rs.ContainsKey(name));
+            Assert.NotNull(rs.GetValue(name));
         }
     }
 
@@ -143,7 +147,7 @@ public class ModbusDriverTests
 
         // 凑批成为一个
         var segs = driver.BuildSegments(points, new ModbusParameter());
-        Assert.Equal(1, segs.Count);
+        Assert.Single(segs);
         Assert.Equal(0, segs[0].Address);
         Assert.Equal(10, segs[0].Count);
 
@@ -178,7 +182,7 @@ public class ModbusDriverTests
 
         // 凑批成为一个
         var segs = driver.BuildSegments(points, new ModbusParameter());
-        Assert.Equal(1, segs.Count);
+        Assert.Single(segs);
         Assert.Equal(0, segs[0].Address);
         Assert.Equal(15, segs[0].Count);
 
@@ -200,11 +204,11 @@ public class ModbusDriverTests
         p = node.Parameter as ModbusParameter;
 
         // 模拟Modbus
-        var mb = new Mock<Modbus>();
-        mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 0, 8))
-            .Returns(new Packet("12-34-56-78-90-12-34-56-78-90-12-34-56-78-90-12".ToHex()));
-        mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 8, 2))
-            .Returns(new Packet("34-56-78-90".ToHex()));
+        var mb = new Mock<Modbus> { CallBase = true };
+        mb.Setup(e => e.ReadAsync(FunctionCodes.ReadRegister, 1, 0, 8, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ArrayPacket)"12-34-56-78-90-12-34-56-78-90-12-34-56-78-90-12".ToHex());
+        mb.Setup(e => e.ReadAsync(FunctionCodes.ReadRegister, 1, 8, 2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ArrayPacket)"34-56-78-90".ToHex());
         driver.Modbus = mb.Object;
 
         var points = new List<IPoint>();
@@ -225,13 +229,13 @@ public class ModbusDriverTests
 
         // 读取
         var rs = driver.Read(node, points.ToArray());
-        Assert.NotNull(rs);
-        Assert.Equal(10, rs.Count);
+        Assert.True(rs.IsSuccess);
+        Assert.Equal(10, rs.Points.Length);
 
         for (var i = 0; i < 10; i++)
         {
             var name = "p" + i;
-            Assert.True(rs.ContainsKey(name));
+            Assert.NotNull(rs.GetValue(name));
         }
     }
 
@@ -246,13 +250,13 @@ public class ModbusDriverTests
         p = node.Parameter as ModbusParameter;
 
         // 模拟Modbus
-        var mb = new Mock<Modbus>();
-        mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 0, 4))
-            .Returns(new Packet("12-34-56-78-90-12-34-56".ToHex()));
-        mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 4, 4))
-            .Returns(new Packet("78-90-12-34-56-78-90-12".ToHex()));
-        mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 8, 2))
-            .Returns(new Packet("34-56-78-90".ToHex()));
+        var mb = new Mock<Modbus> { CallBase = true };
+        mb.Setup(e => e.ReadAsync(FunctionCodes.ReadRegister, 1, 0, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ArrayPacket)"12-34-56-78-90-12-34-56".ToHex());
+        mb.Setup(e => e.ReadAsync(FunctionCodes.ReadRegister, 1, 4, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ArrayPacket)"78-90-12-34-56-78-90-12".ToHex());
+        mb.Setup(e => e.ReadAsync(FunctionCodes.ReadRegister, 1, 8, 2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ArrayPacket)"34-56-78-90".ToHex());
         driver.Modbus = mb.Object;
 
         var points = new List<IPoint>();
@@ -273,13 +277,13 @@ public class ModbusDriverTests
 
         // 读取
         var rs = driver.Read(node, points.ToArray());
-        Assert.NotNull(rs);
-        Assert.Equal(10, rs.Count);
+        Assert.True(rs.IsSuccess);
+        Assert.Equal(10, rs.Points.Length);
 
         for (var i = 0; i < 10; i++)
         {
             var name = "p" + i;
-            Assert.True(rs.ContainsKey(name));
+            Assert.NotNull(rs.GetValue(name));
         }
     }
 
@@ -296,10 +300,10 @@ public class ModbusDriverTests
         var mb = new Mock<Modbus>() { CallBase = true };
         //mb.Setup(e => e.Read(FunctionCodes.ReadRegister, 1, 100, 1))
         //    .Returns("01-02-00".ToHex());
-        mb.Setup(e => e.SendCommand(FunctionCodes.ReadRegister, 1, 100, 1))
-            .Returns("02-02-00".ToHex());
-        mb.Setup(e => e.SendCommand(FunctionCodes.ReadRegister, 1, 102, 1))
-            .Returns("02-05-00".ToHex());
+        mb.Setup(e => e.SendCommandAsync(FunctionCodes.ReadRegister, 1, 100, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ArrayPacket)"02-02-00".ToHex());
+        mb.Setup(e => e.SendCommandAsync(FunctionCodes.ReadRegister, 1, 102, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ArrayPacket)"02-05-00".ToHex());
         driver.Modbus = mb.Object;
 
         var points = new List<IPoint>
@@ -320,11 +324,11 @@ public class ModbusDriverTests
 
         // 读取
         var rs = driver.Read(node, points.ToArray());
-        Assert.NotNull(rs);
-        Assert.Equal(2, rs.Count);
+        Assert.True(rs.IsSuccess);
+        Assert.Equal(2, rs.Points.Length);
 
-        Assert.Equal(0x0200, (rs["调节池运行时间"] as Byte[]).ToUInt16(0, false));
-        Assert.Equal(0x0500, (rs["调节池停止时间"] as Byte[]).ToUInt16(0, false));
+        Assert.Equal(0x0200, (rs.GetValue("调节池运行时间") as Byte[]).ToUInt16(0, false));
+        Assert.Equal(0x0500, (rs.GetValue("调节池停止时间") as Byte[]).ToUInt16(0, false));
     }
 
     [Fact]
@@ -356,7 +360,8 @@ public class ModbusDriverTests
             Length = 2
         };
 
-        var rs = (Int32)driver.Write(node, pt, "15");
-        Assert.Equal(0x000F, rs);
+        var rs = driver.Write(node, pt, "15");
+        Assert.True(rs.IsSuccess);
+        Assert.Equal(0x000F, (Int32)rs.EchoValue!);
     }
 }

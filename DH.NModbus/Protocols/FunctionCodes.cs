@@ -49,6 +49,34 @@ public enum FunctionCodes : Byte
     [Description("23读写多个保持寄存器")]
     ReadWriteMultipleRegisters = 23,
 
+    /// <summary>读异常状态</summary>
+    [Description("07读异常状态")]
+    ReadExceptionStatus = 7,
+
+    /// <summary>获取通信事件计数</summary>
+    [Description("11获取通信事件计数")]
+    GetComEventCounter = 11,
+
+    /// <summary>获取通信事件日志</summary>
+    [Description("12获取通信事件日志")]
+    GetComEventLog = 12,
+
+    /// <summary>报告服务器ID</summary>
+    [Description("17报告服务器ID")]
+    ReportServerId = 17,
+
+    /// <summary>读文件记录</summary>
+    [Description("20读文件记录")]
+    ReadFileRecord = 20,
+
+    /// <summary>屏蔽写寄存器。通过AND/OR掩码修改单个寄存器的指定位</summary>
+    [Description("22屏蔽写寄存器")]
+    MaskWriteRegister = 22,
+
+    /// <summary>读FIFO队列</summary>
+    [Description("24读FIFO队列")]
+    ReadFifoQueue = 24,
+
     /// <summary>读设备识别码</summary>
     [Description("43读设备识别码")]
     ReadDevId = 43,
